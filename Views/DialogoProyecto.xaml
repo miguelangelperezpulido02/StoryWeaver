@@ -1,0 +1,27 @@
+<Window x:Class="Scriptorum.Views.DialogoProyecto"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nuevo proyecto" Height="280" Width="380"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F5F3EF">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="TxtTitulo" Text="Nuevo proyecto" FontSize="16" FontWeight="SemiBold"
+                   Foreground="#2B2D42" Margin="0,0,0,12"/>
+
+        <TextBlock Text="Nombre" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <TextBox x:Name="TxtNombre" Margin="0,0,0,8" Padding="6" MaxLength="100"/>
+
+        <TextBlock Text="Descripción (opcional)" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <TextBox x:Name="TxtDescripcion" Margin="0,0,0,12" Padding="6" MaxLength="500"
+                 TextWrapping="Wrap" AcceptsReturn="True" Height="60"/>
+
+        <TextBlock x:Name="TxtError" Foreground="#D64545" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancelar" Width="90" Margin="0,0,8,0" Padding="6" Click="Cancelar_Click"
+                    Background="Transparent" BorderBrush="#D8D2C4" Cursor="Hand"/>
+            <Button x:Name="BtnAceptar" Content="Crear" Width="90" Padding="6" Click="Aceptar_Click"
+                    Background="#5B7C99" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

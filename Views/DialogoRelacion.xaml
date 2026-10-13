@@ -1,0 +1,45 @@
+<Window x:Class="Scriptorum.Views.DialogoRelacion"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nueva relación" Height="520" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#F5F3EF">
+    <StackPanel Margin="16">
+        <TextBlock Text="Crear relación manual" FontSize="16" FontWeight="SemiBold"
+                   Foreground="#2B2D42" Margin="0,0,0,12"/>
+
+        <TextBlock Text="Personaje origen (A)" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <ComboBox x:Name="CboOrigen" DisplayMemberPath="Nombre" Margin="0,0,0,8" Padding="6"/>
+
+        <TextBlock Text="Personaje destino (B)" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <ComboBox x:Name="CboDestino" DisplayMemberPath="Nombre" Margin="0,0,0,8" Padding="6"/>
+
+        <TextBlock Text="Descripción general" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <TextBox x:Name="TxtGeneral" Margin="0,0,0,8" Padding="6" MaxLength="300"
+                 ToolTip="Se muestra al pasar el ratón sobre la línea"/>
+
+        <TextBlock Text="Cómo ve A a B" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <TextBox x:Name="TxtOrigenADestino" Margin="0,0,0,8" Padding="6" MaxLength="500"
+                 TextWrapping="Wrap" AcceptsReturn="True" Height="60"/>
+
+        <TextBlock Text="Cómo ve B a A" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <TextBox x:Name="TxtDestinoAOrigen" Margin="0,0,0,8" Padding="6" MaxLength="500"
+                 TextWrapping="Wrap" AcceptsReturn="True" Height="60"/>
+
+        <TextBlock Text="Color de la línea" Foreground="#8A8578" Margin="0,0,0,2"/>
+        <ComboBox x:Name="CboColor" Margin="0,0,0,12" Padding="6" SelectedIndex="0">
+            <ComboBoxItem Content="Azul"/>
+            <ComboBoxItem Content="Verde"/>
+            <ComboBoxItem Content="Rojo"/>
+        </ComboBox>
+
+        <TextBlock x:Name="TxtError" Foreground="#D64545" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancelar" Width="90" Margin="0,0,8,0" Padding="6" Click="Cancelar_Click"
+                    Background="Transparent" BorderBrush="#D8D2C4" Cursor="Hand"/>
+            <Button Content="Crear" Width="90" Padding="6" Click="Crear_Click"
+                    Background="#5B7C99" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

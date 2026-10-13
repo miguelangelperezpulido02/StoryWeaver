@@ -1,0 +1,9 @@
+# Compilados y temporales .NET
+bin/
+obj/
+.vs/
+*.user
+
+# Datos locales de la app (historias del usuario, no se publican)
+*.db
+proyecto_activo.txt
