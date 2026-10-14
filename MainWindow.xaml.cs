@@ -2,8 +2,11 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using Scriptorum.Modelos;
 using Scriptorum.Utils;
@@ -35,6 +38,10 @@ public partial class MainWindow : Window
     private Personaje? _origenPendiente; // origen elegido con clic derecho, a la espera de destino
     private Cursor? _cursorMapaPrevio;
 
+    private bool _arrastreListaPosible;
+    private Personaje? _personajeArrastre;
+    private Point _arrastreInicio;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -42,6 +49,7 @@ public partial class MainWindow : Window
         DataContext = vm;
 
         vm.CambiosMapa += RedibujarRelaciones;
+        vm.CambiosMapa += RedibujarCronologia;
         vm.Relaciones.CollectionChanged += (_, _) => RedibujarRelaciones();
         vm.Personajes.CollectionChanged += Personajes_CollectionChanged;
         vm.PropertyChanged += Vm_PropertyChanged;
@@ -50,6 +58,7 @@ public partial class MainWindow : Window
             p.PropertyChanged += Personaje_PropertyChanged;
 
         RedibujarRelaciones();
+        RedibujarCronologia();
     }
 
     private MainViewModel? VM => DataContext as MainViewModel;
@@ -68,6 +77,8 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.RelacionSeleccionada))
             RedibujarRelaciones();
+        if (e.PropertyName == nameof(MainViewModel.CronologiaSeleccionada))
+            RedibujarCronologia();
     }
 
     // Durante el arrastre las lineas siguen al nodo en vivo.
@@ -362,10 +373,117 @@ public partial class MainWindow : Window
         {
             if (actual == ancestro)
                 return true;
-            actual = VisualTreeHelper.GetParent(actual) ?? LogicalTreeHelper.GetParent(actual);
+            actual = PadreSeguro(actual);
         }
         return false;
     }
+
+    // ---- Arrastrar personajes entre grupos (lista lateral) ----
+    // El clic simple sigue seleccionando; solo hay arrastre tras superar el umbral.
+
+    private void ListaPersonajes_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _arrastreListaPosible = false;
+        _personajeArrastre = null;
+        if (e.LeftButton != MouseButtonState.Pressed)
+            return;
+        var item = EncontrarAncestro<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (item?.DataContext is Personaje p)
+        {
+            _arrastreListaPosible = true;
+            _personajeArrastre = p;
+            _arrastreInicio = e.GetPosition(ListaPersonajes);
+        }
+    }
+
+    private void ListaPersonajes_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_arrastreListaPosible || _personajeArrastre is null || e.LeftButton != MouseButtonState.Pressed)
+            return;
+        var pos = e.GetPosition(ListaPersonajes);
+        if (Math.Abs(pos.X - _arrastreInicio.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _arrastreInicio.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+        _arrastreListaPosible = false;
+        DragDrop.DoDragDrop(ListaPersonajes, _personajeArrastre, DragDropEffects.Move);
+        _personajeArrastre = null;
+    }
+
+    private void ListaPersonajes_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        _arrastreListaPosible = false;
+        _personajeArrastre = null;
+    }
+
+    private void Grupo_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(Personaje)) is Personaje)
+        {
+            e.Effects = DragDropEffects.Move;
+            if (sender is GroupItem g)
+                g.Background = new SolidColorBrush(Color.FromRgb(0x45, 0x47, 0x5E));
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    private void Grupo_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is GroupItem g)
+            g.ClearValue(Control.BackgroundProperty);
+        e.Handled = true;
+    }
+
+    private void Grupo_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is GroupItem g)
+            g.ClearValue(Control.BackgroundProperty);
+        if (e.Data.GetData(typeof(Personaje)) is not Personaje p || VM is null)
+            return;
+        if ((sender as GroupItem)?.DataContext is not CollectionViewGroup grupo)
+            return;
+        VM.MoverAGrupo(p, grupo.Name as string ?? string.Empty);
+        e.Handled = true;
+    }
+
+    // Zona vacía de la lista (fuera de cualquier grupo): saca al personaje del grupo.
+    // Los drops sobre un grupo los procesa Grupo_Drop (Handled) y no llegan aquí.
+    private void ListaPersonajes_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetData(typeof(Personaje)) is Personaje
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void ListaPersonajes_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(Personaje)) is not Personaje p || VM is null)
+            return;
+        VM.MoverAGrupo(p, "Sin grupo");
+        e.Handled = true;
+    }
+
+    private static T? EncontrarAncestro<T>(DependencyObject? actual) where T : DependencyObject
+    {
+        while (actual != null)
+        {
+            if (actual is T coincidencia)
+                return coincidencia;
+            actual = PadreSeguro(actual);
+        }
+        return null;
+    }
+
+    // VisualTreeHelper.GetParent lanza InvalidOperationException con elementos
+    // de contenido (ej. Run): solo se usa con Visual/Visual3D, el resto va por el árbol lógico.
+    private static DependencyObject? PadreSeguro(DependencyObject actual)
+        => (actual is Visual || actual is Visual3D)
+            ? VisualTreeHelper.GetParent(actual)
+            : LogicalTreeHelper.GetParent(actual);
 
     // ---- Proyectos: crear, editar, eliminar ----
     // El cambio de proyecto llega por el ComboBox (ProyectoActual):
@@ -396,6 +514,418 @@ public partial class MainWindow : Window
     private void EliminarProyecto_Click(object sender, RoutedEventArgs e)
     {
         VM?.EliminarProyectoActual();
+    }
+
+    // ---- Notas: crear, editar, eliminar ----
+
+    private void NuevaNota_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm is null)
+            return;
+        var dialogo = new DialogoNota { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.CrearNota(dialogo.TituloNota, dialogo.TextoNota);
+    }
+
+    private void EditarNota_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm?.NotaSeleccionada is null)
+            return;
+        var dialogo = new DialogoNota(vm.NotaSeleccionada) { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.ActualizarNota(vm.NotaSeleccionada, dialogo.TituloNota, dialogo.TextoNota);
+    }
+
+    private void EliminarNota_Click(object sender, RoutedEventArgs e)
+    {
+        VM?.EliminarNotaSeleccionada();
+    }
+
+    // ---- Cronología: carriles con tarjetas ordenadas ----
+
+    private const double AnchoTarjeta = 170;
+    private const double PasoTarjeta = 180; // tarjeta + margen derecho
+
+    private bool _arrastreTarjetaPosible;
+    private Cronologia? _tarjetaArrastre;
+    private Point _arrastreTarjetaInicio;
+
+    private void NuevaLinea_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm is null)
+            return;
+        var dialogo = new DialogoLineaTiempo { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.CrearLinea(dialogo.NombreLinea);
+        RedibujarCronologia();
+    }
+
+    // Doble clic en el nombre del carril para renombrarlo.
+    private void NombreLinea_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        var vm = VM;
+        if (sender is not FrameworkElement elemento || elemento.Tag is not LineaTiempo linea || vm is null)
+            return;
+        if (e.ClickCount < 2)
+            return;
+        var dialogo = new DialogoLineaTiempo(linea) { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.RenombrarLinea(linea, dialogo.NombreLinea);
+        RedibujarCronologia();
+        e.Handled = true;
+    }
+
+    // Botón ＋ al final de un carril: añade evento en ese carril (Tag = LineaId).
+    private void NuevoEventoEnLinea_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm is null || sender is not Button boton || boton.Tag is not int lineaId)
+            return;
+        var dialogo = new DialogoCronologia(vm.Personajes) { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.CrearEvento(dialogo.TituloEvento, dialogo.DescripcionEvento,
+            dialogo.PersonajeSeleccionado?.Id, dialogo.TipoEvento, lineaId);
+        RedibujarCronologia();
+    }
+
+    private void EditarEvento_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm?.CronologiaSeleccionada is null)
+        {
+            MessageBox.Show(this, "Selecciona un evento primero (clic en su tarjeta).",
+                "Scriptorum", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        AbrirEdicionEvento(vm, vm.CronologiaSeleccionada);
+    }
+
+    private void EliminarEvento_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm?.CronologiaSeleccionada is null)
+        {
+            MessageBox.Show(this, "Selecciona un evento primero (clic en su tarjeta).",
+                "Scriptorum", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        vm.EliminarEventoSeleccionado();
+        RedibujarCronologia();
+    }
+
+    private void AbrirEdicionEvento(MainViewModel vm, Cronologia evento)
+    {
+        var dialogo = new DialogoCronologia(vm.Personajes, evento) { Owner = this };
+        if (dialogo.ShowDialog() != true)
+            return;
+        vm.ActualizarEvento(evento, dialogo.TituloEvento,
+            dialogo.DescripcionEvento,
+            dialogo.PersonajeSeleccionado?.Id, dialogo.TipoEvento);
+        RedibujarCronologia();
+    }
+
+    // Arrastre de tarjetas para ordenar (mismo patrón que la lista de personajes):
+    // el clic simple selecciona; el arrastre empieza tras superar el umbral.
+    private void Tarjeta_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var vm = VM;
+        _arrastreTarjetaPosible = false;
+        _tarjetaArrastre = null;
+        if (sender is not FrameworkElement elemento || elemento.Tag is not Cronologia evento || vm is null)
+            return;
+
+        vm.CronologiaSeleccionada = evento;
+        // Border no tiene evento de doble clic: se detecta por conteo.
+        if (e.ClickCount >= 2)
+        {
+            AbrirEdicionEvento(vm, evento);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            _arrastreTarjetaPosible = true;
+            _tarjetaArrastre = evento;
+            _arrastreTarjetaInicio = e.GetPosition(elemento);
+        }
+        e.Handled = true;
+    }
+
+    private void Tarjeta_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_arrastreTarjetaPosible || _tarjetaArrastre is null || e.LeftButton != MouseButtonState.Pressed)
+            return;
+        if (sender is not FrameworkElement elemento)
+            return;
+        var pos = e.GetPosition(elemento);
+        if (Math.Abs(pos.X - _arrastreTarjetaInicio.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _arrastreTarjetaInicio.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+        _arrastreTarjetaPosible = false;
+        DragDrop.DoDragDrop(PilaLineas, _tarjetaArrastre, DragDropEffects.Move);
+        _tarjetaArrastre = null;
+    }
+
+    private void Tarjeta_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        _arrastreTarjetaPosible = false;
+        _tarjetaArrastre = null;
+    }
+
+    // Soltado sobre la tira de un carril: calcula el índice por posición X.
+    private void PistaLinea_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(Cronologia)) is Cronologia)
+        {
+            e.Effects = DragDropEffects.Move;
+            if (sender is StackPanel tira)
+                tira.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EFE9DC"));
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    private void PistaLinea_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is StackPanel tira)
+            tira.ClearValue(StackPanel.BackgroundProperty);
+        e.Handled = true;
+    }
+
+    private void PistaLinea_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is StackPanel tira)
+            tira.ClearValue(StackPanel.BackgroundProperty);
+        if (e.Data.GetData(typeof(Cronologia)) is not Cronologia evento || VM is null)
+            return;
+        if (sender is not StackPanel pista || pista.Tag is not int lineaId)
+            return;
+        int indice = (int)(e.GetPosition(pista).X / PasoTarjeta);
+        VM.MoverEvento(evento, lineaId, indice);
+        RedibujarCronologia();
+        e.Handled = true;
+    }
+
+    private void RedibujarCronologia()
+    {
+        var vm = VM;
+        if (vm is null || PilaLineas is null)
+            return;
+
+        PilaLineas.Children.Clear();
+
+        if (vm.Lineas.Count == 0)
+        {
+            var vacio = new TextBlock
+            {
+                Text = "Sin líneas de tiempo. Pulsa «＋ Nueva línea de tiempo» para crear la primera.",
+                FontStyle = FontStyles.Italic,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A8578")),
+                Margin = new Thickness(8)
+            };
+            PilaLineas.Children.Add(vacio);
+            return;
+        }
+
+        foreach (var linea in vm.Lineas)
+            PilaLineas.Children.Add(CrearCarril(vm, linea));
+    }
+
+    // Carril estilo referencia: columna con nombre + tira horizontal de tarjetas.
+    private Border CrearCarril(MainViewModel vm, LineaTiempo linea)
+    {
+        var eventos = vm.Cronologias.Where(e => e.LineaId == linea.Id).ToList();
+
+        var carril = new Border
+        {
+            Background = Brushes.White,
+            CornerRadius = new CornerRadius(10),
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D8D2C4")),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        carril.Effect = new DropShadowEffect { BlurRadius = 8, ShadowDepth = 2, Opacity = 0.2, Color = Colors.Gray };
+
+        var rejilla = new Grid();
+        rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        rejilla.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var cabecera = new StackPanel { Tag = linea, Cursor = Cursors.Hand, ToolTip = "Doble clic para renombrar" };
+        cabecera.PreviewMouseLeftButtonDown += NombreLinea_MouseDown;
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = "⋮⋮",
+            FontSize = 12,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#B8B4A8")),
+            Margin = new Thickness(0, 0, 0, 2)
+        });
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = linea.Nombre,
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2B2D42")),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = eventos.Count == 1 ? "1 evento" : $"{eventos.Count} eventos",
+            FontSize = 11,
+            FontStyle = FontStyles.Italic,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A8578"))
+        });
+        Grid.SetColumn(cabecera, 0);
+        rejilla.Children.Add(cabecera);
+
+        var tira = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Background = Brushes.Transparent,
+            Tag = linea.Id,
+            AllowDrop = true
+        };
+        tira.DragOver += PistaLinea_DragOver;
+        tira.DragLeave += PistaLinea_DragLeave;
+        tira.Drop += PistaLinea_Drop;
+
+        int numero = 1;
+        foreach (var ev in eventos)
+        {
+            tira.Children.Add(CrearTarjeta(vm, ev, numero));
+            numero++;
+        }
+
+        var mas = new Button
+        {
+            Content = "+",
+            Width = 40,
+            Height = 40,
+            Margin = new Thickness(0, 30, 0, 0),
+            Background = Brushes.Transparent,
+            BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D8D2C4")),
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A8578")),
+            FontSize = 18,
+            Cursor = Cursors.Hand,
+            Tag = linea.Id,
+            ToolTip = "Añadir evento a esta línea"
+        };
+        mas.Click += NuevoEventoEnLinea_Click;
+        tira.Children.Add(mas);
+
+        var visor = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = tira
+        };
+        Grid.SetColumn(visor, 1);
+        rejilla.Children.Add(visor);
+
+        carril.Child = rejilla;
+        return carril;
+    }
+
+    // Tarjeta de evento dentro de su carril.
+    private Border CrearTarjeta(MainViewModel vm, Cronologia ev, int numero)
+    {
+        var (fondoHex, acentoHex) = TiposCronologia.Colores(ev.Tipo);
+        var fondo = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fondoHex));
+        var acento = new SolidColorBrush((Color)ColorConverter.ConvertFromString(acentoHex));
+        bool seleccionada = vm.CronologiaSeleccionada == ev;
+
+        var tarjeta = new Border
+        {
+            Width = AnchoTarjeta,
+            MinHeight = 110,
+            CornerRadius = new CornerRadius(8),
+            Background = fondo,
+            BorderBrush = seleccionada ? acento : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D8D2C4")),
+            BorderThickness = seleccionada ? new Thickness(3) : new Thickness(4, 1, 1, 1),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 0, 10, 0),
+            Cursor = Cursors.Hand,
+            Tag = ev
+        };
+        tarjeta.Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 1, Opacity = 0.2, Color = Colors.Gray };
+
+        string tooltip = ev.Titulo;
+        tooltip += "\n" + (ev.PersonajeId is null ? "(Sin personaje)" : vm.NombrePersonaje(ev.PersonajeId.Value));
+        if (!string.IsNullOrWhiteSpace(ev.Descripcion))
+            tooltip += "\n" + ev.Descripcion;
+        tarjeta.ToolTip = tooltip;
+
+        tarjeta.PreviewMouseLeftButtonDown += Tarjeta_MouseLeftButtonDown;
+        tarjeta.PreviewMouseMove += Tarjeta_MouseMove;
+        tarjeta.PreviewMouseLeftButtonUp += Tarjeta_MouseUp;
+
+        var cabecera = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+        cabecera.Children.Add(new Border
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(10),
+            Background = Brushes.White,
+            BorderBrush = acento,
+            BorderThickness = new Thickness(2),
+            Margin = new Thickness(0, 0, 6, 0),
+            Child = new TextBlock
+            {
+                Text = numero.ToString(),
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = acento,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        });
+        cabecera.Children.Add(new TextBlock
+        {
+            Text = ev.Tipo,
+            FontSize = 10,
+            FontWeight = FontWeights.Bold,
+            Foreground = acento,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        var contenido = new StackPanel();
+        contenido.Children.Add(cabecera);
+        contenido.Children.Add(new TextBlock
+        {
+            Text = ev.Titulo,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2B2D42")),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 2)
+        });
+        if (!string.IsNullOrWhiteSpace(ev.Descripcion))
+        {
+            contenido.Children.Add(new TextBlock
+            {
+                Text = ev.Descripcion,
+                FontSize = 11,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B675C")),
+                TextWrapping = TextWrapping.Wrap,
+                MaxHeight = 60,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+        }
+            tarjeta.Child = contenido;
+        return tarjeta;
     }
 
     // ---- Relaciones: crear, dibujar, seleccionar ----

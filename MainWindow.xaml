@@ -48,6 +48,9 @@
                                 <TextBox Text="{Binding NuevoNombre, UpdateSourceTrigger=PropertyChanged}"
                                          Margin="0,0,0,6" Padding="6"
                                          ToolTip="Nombre del nuevo personaje"/>
+                                <TextBox Text="{Binding NuevoGrupo, UpdateSourceTrigger=LostFocus}"
+                                         Margin="0,0,0,6" Padding="6"
+                                         ToolTip="Grupo o carpeta (opcional, ej. Familia)"/>
                                 <Button Content="＋ Añadir personaje"
                                         Command="{Binding AnadirPersonajeCommand}"
                                         Padding="6" Background="#5B7C99" Foreground="White"
@@ -58,11 +61,54 @@
                                         BorderThickness="0" Cursor="Hand"
                                         ToolTip="Elimina el personaje seleccionado y sus relaciones"/>
                             </StackPanel>
-                            <ListBox ItemsSource="{Binding Personajes}"
+                            <ListBox x:Name="ListaPersonajes" ItemsSource="{Binding PersonajesVista}"
                                      SelectedItem="{Binding PersonajeSeleccionado, Mode=TwoWay}"
-                                     DisplayMemberPath="Nombre"
                                      Background="#343654" Foreground="#F5F3EF"
-                                     BorderThickness="0" Padding="4"/>
+                                     BorderThickness="0" Padding="4"
+                                     ToolTip="Arrastra sobre un grupo para moverlo; suelta en zona vacía para sacarlo"
+                                     AllowDrop="True"
+                                     PreviewMouseLeftButtonDown="ListaPersonajes_MouseDown"
+                                     PreviewMouseMove="ListaPersonajes_MouseMove"
+                                     PreviewMouseLeftButtonUp="ListaPersonajes_MouseUp"
+                                     DragOver="ListaPersonajes_DragOver"
+                                     Drop="ListaPersonajes_Drop">
+                                <ListBox.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.ContainerStyle>
+                                            <Style TargetType="{x:Type GroupItem}">
+                                                <Setter Property="AllowDrop" Value="True"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="{x:Type GroupItem}">
+                                                            <Border Background="{TemplateBinding Background}" Padding="0,0,0,6">
+                                                                <StackPanel>
+                                                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                                                        ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                                                    <ItemsPresenter/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <EventSetter Event="DragOver" Handler="Grupo_DragOver"/>
+                                                <EventSetter Event="DragLeave" Handler="Grupo_DragLeave"/>
+                                                <EventSetter Event="Drop" Handler="Grupo_Drop"/>
+                                            </Style>
+                                        </GroupStyle.ContainerStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" Foreground="#F5F3EF"
+                                                           FontWeight="Bold" Margin="0,6,0,2"/>
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ListBox.GroupStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Nombre}" Margin="14,1,0,1"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </DockPanel>
                     </Border>
 
@@ -173,17 +219,34 @@
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Content" Value="Ocultar panel »"/>
+                                    <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding PanelVisible}" Value="False">
                                             <Setter Property="Content" Value="« Mostrar panel"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HaySeleccion}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                         </Button>
                         <Border Grid.Row="1" Background="White" CornerRadius="8"
-                                BorderBrush="#D8D2C4" BorderThickness="1"
-                                Visibility="{Binding PanelVisible, Converter={StaticResource BoolToVis}}">
+                                BorderBrush="#D8D2C4" BorderThickness="1">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding PanelVisible}" Value="True"/>
+                                                <Condition Binding="{Binding HaySeleccion}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <ScrollViewer Padding="12" VerticalScrollBarVisibility="Auto">
                                 <StackPanel>
                                     <!-- Ficha de personaje -->
@@ -193,6 +256,10 @@
                                         <TextBlock Text="Nombre" Foreground="#8A8578" Margin="0,0,0,2"/>
                                         <TextBox Text="{Binding Nombre, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  Padding="6" Margin="0,0,0,10"/>
+                                        <TextBlock Text="Grupo" Foreground="#8A8578" Margin="0,0,0,2"/>
+                                        <TextBox Text="{Binding Grupo, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 Padding="6" Margin="0,0,0,10"
+                                                 ToolTip="Carpeta estilo Obsidian (vacío = Sin grupo)"/>
                                         <TextBlock Text="Posición en el mapa" Foreground="#8A8578" Margin="0,0,0,2"/>
                                         <TextBlock Foreground="#2B2D42" Margin="0,0,0,10">
                                             <Run Text="X: "/><Run Text="{Binding PosX, StringFormat=F0}"/>
@@ -283,6 +350,109 @@
                             </StackPanel>
                         </Border>
                     </Grid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Cronología">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0" Margin="12,8" LastChildFill="False">
+                        <TextBlock Text="Líneas de tiempo" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#2B2D42" VerticalAlignment="Center"/>
+                        <TextBlock Text="Doble clic en el nombre para renombrarlo · Arrastra tarjetas para ordenar."
+                                   Foreground="#8A8578" Margin="12,0,0,0"
+                                   VerticalAlignment="Center" FontStyle="Italic"/>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="＋ Nueva línea de tiempo" Click="NuevaLinea_Click" Padding="10,4"
+                                    Background="#2B2D42" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"/>
+                            <Button Content="Editar evento" Click="EditarEvento_Click" Padding="10,4" Margin="6,0,0,0"
+                                    Background="Transparent" BorderBrush="#D8D2C4" Cursor="Hand"/>
+                            <Button Content="Borrar evento" Click="EliminarEvento_Click" Padding="10,4" Margin="6,0,0,0"
+                                    Background="#D64545" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <Border Grid.Row="1" Background="#F5F3EF" CornerRadius="8"
+                            BorderBrush="#D8D2C4" BorderThickness="1" ClipToBounds="True">
+                        <ScrollViewer x:Name="VisorCronologia"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Background="#F5F3EF" Padding="16">
+                            <StackPanel x:Name="PilaLineas"/>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Notas">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="280"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="#2B2D42" CornerRadius="8" Margin="0,0,6,0" Padding="10">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Top" Text="Notas" Foreground="#F5F3EF"
+                                       FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <UniformGrid DockPanel.Dock="Bottom" Columns="3" Margin="0,8,0,0">
+                                <Button Content="Nueva" Click="NuevaNota_Click" Margin="0,0,4,0" Padding="4"
+                                        Background="#5B7C99" Foreground="White"
+                                        BorderThickness="0" Cursor="Hand"/>
+                                <Button Content="Editar" Click="EditarNota_Click" Margin="0,0,4,0" Padding="4"
+                                        Background="#45475E" Foreground="White"
+                                        BorderThickness="0" Cursor="Hand"/>
+                                <Button Content="Borrar" Click="EliminarNota_Click" Padding="4"
+                                        Background="#D64545" Foreground="White"
+                                        BorderThickness="0" Cursor="Hand"/>
+                            </UniformGrid>
+                            <ListBox ItemsSource="{Binding Notas}"
+                                     SelectedItem="{Binding NotaSeleccionada, Mode=TwoWay}"
+                                     Background="#343654" Foreground="#F5F3EF"
+                                     BorderThickness="0" Padding="4">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,2">
+                                            <TextBlock Text="{Binding Titulo}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding FechaCreacion, StringFormat=g}"
+                                                       Foreground="#B8B4A8" FontSize="11"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+                    <Border Grid.Column="1" Background="White" CornerRadius="8"
+                            BorderBrush="#D8D2C4" BorderThickness="1" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel DataContext="{Binding NotaSeleccionada}">
+                                <TextBlock Text="Detalle de la nota" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="#2B2D42" Margin="0,0,0,8"/>
+                                <TextBlock Text="Título" Foreground="#8A8578" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding Titulo}" Foreground="#2B2D42" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <TextBlock Text="Creada" Foreground="#8A8578" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding FechaCreacion, StringFormat=g}" Foreground="#2B2D42" Margin="0,0,0,8"/>
+                                <TextBlock Text="Texto" Foreground="#8A8578" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding Texto}" Foreground="#2B2D42"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="Selecciona una nota de la lista para verla aquí."
+                                           Foreground="#8A8578" FontStyle="Italic" TextWrapping="Wrap" Margin="0,12,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
                 </Grid>
             </TabItem>
         </TabControl>

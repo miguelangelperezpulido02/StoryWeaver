@@ -8,6 +8,7 @@ namespace Scriptorum.Modelos;
 public class Personaje : INotifyPropertyChanged
 {
     private string _nombre = string.Empty;
+    private string _grupo = string.Empty;
     private double _posX = 100;
     private double _posY = 100;
 
@@ -21,6 +22,19 @@ public class Personaje : INotifyPropertyChanged
         get => _nombre;
         set { _nombre = value; OnPropertyChanged(); }
     }
+
+    // Carpeta estilo Obsidian (ej. "Familia"). Vacío = sin grupo.
+    public string Grupo
+    {
+        get => _grupo;
+        set { _grupo = value; OnPropertyChanged(); OnPropertyChanged(nameof(GrupoVista)); }
+    }
+
+    // Texto para agrupar en la lista: nunca vacío.
+    public string GrupoVista => string.IsNullOrWhiteSpace(_grupo) ? "Sin grupo" : _grupo.Trim();
+
+    // Para mostrar el nombre en ComboBox con opciones mixtas (diálogo de cronología).
+    public override string ToString() => Nombre;
 
     // Coordenadas del nodo en el Canvas. Se guardan en SQLite.
     public double PosX

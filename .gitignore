@@ -7,3 +7,4 @@ obj/
 # Datos locales de la app (historias del usuario, no se publican)
 *.db
 proyecto_activo.txt
+*.log
