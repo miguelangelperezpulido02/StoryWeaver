@@ -3,8 +3,11 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Threading;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
@@ -42,6 +45,11 @@ public partial class MainWindow : Window
     private Personaje? _personajeArrastre;
     private Point _arrastreInicio;
 
+    private Nota? _notaEditando; // nota suscrita al autoguardado del editor integrado
+    private readonly DispatcherTimer _temporizadorNotas = new() { Interval = TimeSpan.FromMilliseconds(800) };
+    private bool _sincronizandoNota;
+    private bool _cargandoDocumento; // evita que cargar el documento dispare el autoguardado
+
     public MainWindow()
     {
         InitializeComponent();
@@ -53,6 +61,9 @@ public partial class MainWindow : Window
         vm.Relaciones.CollectionChanged += (_, _) => RedibujarRelaciones();
         vm.Personajes.CollectionChanged += Personajes_CollectionChanged;
         vm.PropertyChanged += Vm_PropertyChanged;
+
+        _temporizadorNotas.Tick += (_, _) => VolcarNotaEditando();
+        SincronizarNotaEditando();
 
         foreach (var p in vm.Personajes)
             p.PropertyChanged += Personaje_PropertyChanged;
@@ -79,6 +90,8 @@ public partial class MainWindow : Window
             RedibujarRelaciones();
         if (e.PropertyName == nameof(MainViewModel.CronologiaSeleccionada))
             RedibujarCronologia();
+        if (e.PropertyName == nameof(MainViewModel.NotaSeleccionada))
+            SincronizarNotaEditando();
     }
 
     // Durante el arrastre las lineas siguen al nodo en vivo.
@@ -516,33 +529,161 @@ public partial class MainWindow : Window
         VM?.EliminarProyectoActual();
     }
 
-    // ---- Notas: crear, editar, eliminar ----
+    // ---- Notas: editor integrado con autoguardado (800 ms tras dejar de escribir) ----
+
+    // Guarda lo pendiente de la nota anterior y se suscribe a la nueva.
+    // Se relee la selección tras guardar porque el guardado puede cambiarla
+    // (un borrador vacío descartado deja NotaSeleccionada a null).
+    private void SincronizarNotaEditando()
+    {
+        if (_sincronizandoNota)
+            return;
+        _sincronizandoNota = true;
+        try
+        {
+            _temporizadorNotas.Stop();
+            if (_notaEditando != null)
+            {
+                VM?.GuardarNotaEditada(_notaEditando);
+                _notaEditando.PropertyChanged -= NotaEditando_Cambiada;
+                _notaEditando = null;
+            }
+            _notaEditando = VM?.NotaSeleccionada;
+            if (_notaEditando != null)
+                _notaEditando.PropertyChanged += NotaEditando_Cambiada;
+            // Al cambiar de nota el documento visible debe ser el de la nueva
+            // (aquí el salto del cursor es lo esperado).
+            CargarDocumento(_notaEditando);
+        }
+        finally
+        {
+            _sincronizandoNota = false;
+        }
+    }
+
+    // Vuelca el documento visible a la entidad y lo guarda. Si el guardado
+    // revirtió la nota (se había vaciado del todo), recarga el documento
+    // para que lo visible coincida con lo guardado.
+    private bool VolcarNotaEditando()
+    {
+        _temporizadorNotas.Stop();
+        if (_notaEditando is null || VM is null)
+            return false;
+        SincronizarTextoDesdeDocumento();
+        bool revertida = VM.GuardarNotaEditada(_notaEditando);
+        if (revertida)
+            CargarDocumento(_notaEditando);
+        return revertida;
+    }
+
+    // Los botones ejecutan el comando directamente sobre el editor: funcionan
+    // aunque el foco esté en el propio botón, así el formato se activa Y se
+    // desactiva con la misma pulsación. Tras pulsar, el foco vuelve al texto.
+    private void FormatoNegrita_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleBold.Execute(null, CajaTexto);
+        CajaTexto.Focus();
+        SincronizarBotonesFormato();
+    }
+
+    private void FormatoCursiva_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleItalic.Execute(null, CajaTexto);
+        CajaTexto.Focus();
+        SincronizarBotonesFormato();
+    }
+
+    // Cada botón refleja el formato bajo el cursor (también al moverse por el
+    // texto o al usar Ctrl+B / Ctrl+I desde el teclado).
+    private void CajaTexto_SelectionChanged(object sender, RoutedEventArgs e) => SincronizarBotonesFormato();
+
+    private void SincronizarBotonesFormato()
+    {
+        BtnNegrita.IsChecked = Equals(CajaTexto.Selection.GetPropertyValue(TextElement.FontWeightProperty), FontWeights.Bold);
+        BtnCursiva.IsChecked = Equals(CajaTexto.Selection.GetPropertyValue(TextElement.FontStyleProperty), FontStyles.Italic);
+    }
+
+    // El documento es la fuente de verdad visual; la entidad solo recibe
+    // su serialización XAML (o texto plano heredado al abrir notas antiguas).
+    private void CargarDocumento(Nota? nota)
+    {
+        _cargandoDocumento = true;
+        try
+        {
+            if (nota is null)
+            {
+                CajaTexto.Document = new FlowDocument();
+                return;
+            }
+            if (MainViewModel.EsDocumentoXaml(nota.Texto))
+            {
+                try
+                {
+                    if (XamlReader.Parse(nota.Texto) is FlowDocument doc)
+                    {
+                        CajaTexto.Document = doc;
+                        return;
+                    }
+                }
+                catch
+                {
+                    // XAML dañado: se muestra como texto plano.
+                }
+            }
+            CajaTexto.Document = new FlowDocument(new Paragraph(new Run(nota.Texto ?? string.Empty)));
+        }
+        finally
+        {
+            _cargandoDocumento = false;
+        }
+    }
+
+    private void CajaTexto_TextChanged(object sender, TextChangedEventArgs e) => SincronizarTextoDesdeDocumento();
+
+    // El documento manda: se vuelca a la entidad antes de cada guardado para
+    // no depender de que cada cambio de formato haya disparado TextChanged.
+    private void SincronizarTextoDesdeDocumento()
+    {
+        if (_cargandoDocumento || _notaEditando is null)
+            return;
+        // La asignación avisa a NotaEditando_Cambiada, que rearma el autoguardado.
+        _notaEditando.Texto = XamlWriter.Save(CajaTexto.Document);
+    }
+
+    private void NotaEditando_Cambiada(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(Nota.Titulo) && e.PropertyName != nameof(Nota.Texto))
+            return;
+        VM?.MarcarNotaEditando();
+        _temporizadorNotas.Stop();
+        _temporizadorNotas.Start();
+    }
 
     private void NuevaNota_Click(object sender, RoutedEventArgs e)
     {
-        var vm = VM;
-        if (vm is null)
-            return;
-        var dialogo = new DialogoNota { Owner = this };
-        if (dialogo.ShowDialog() != true)
-            return;
-        vm.CrearNota(dialogo.TituloNota, dialogo.TextoNota);
-    }
-
-    private void EditarNota_Click(object sender, RoutedEventArgs e)
-    {
-        var vm = VM;
-        if (vm?.NotaSeleccionada is null)
-            return;
-        var dialogo = new DialogoNota(vm.NotaSeleccionada) { Owner = this };
-        if (dialogo.ShowDialog() != true)
-            return;
-        vm.ActualizarNota(vm.NotaSeleccionada, dialogo.TituloNota, dialogo.TextoNota);
+        VM?.NuevaNotaBorrador();
     }
 
     private void EliminarNota_Click(object sender, RoutedEventArgs e)
     {
+        _temporizadorNotas.Stop();
         VM?.EliminarNotaSeleccionada();
+    }
+
+    // Cambiar de pestaña o cerrar la app vuelca lo escrito para no perderlo.
+    // El guard solo reacciona al cambio de pestaña propio: los SelectionChanged
+    // de listas internas (p. ej. la de notas) burbujean hasta aquí y deben ignorarse,
+    // o un borrador recién creado se descartaría al instante por estar vacío.
+    private void Pestanas_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.OriginalSource, Pestanas))
+            return;
+        VolcarNotaEditando();
+    }
+
+    private void Ventana_Closing(object? sender, CancelEventArgs e)
+    {
+        VolcarNotaEditando();
     }
 
     // ---- Cronología: carriles con tarjetas ordenadas ----

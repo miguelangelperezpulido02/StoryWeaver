@@ -3,6 +3,9 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Markup;
+using Microsoft.EntityFrameworkCore;
 using Scriptorum.Modelos;
 using Scriptorum.Utils;
 
@@ -78,6 +81,16 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _notaSeleccionada;
         set { _notaSeleccionada = value; OnPropertyChanged(); }
+    }
+
+    private string _estadoGuardadoNotas = string.Empty;
+
+    // Pie del editor integrado: "Editando…" mientras se escribe,
+    // "Guardado ✓ HH:mm:ss" tras el autoguardado.
+    public string EstadoGuardadoNotas
+    {
+        get => _estadoGuardadoNotas;
+        private set { _estadoGuardadoNotas = value; OnPropertyChanged(); }
     }
 
     public string NuevoNombre
@@ -214,6 +227,7 @@ public class MainViewModel : INotifyPropertyChanged
         RelacionSeleccionada = null;
         CronologiaSeleccionada = null;
         NotaSeleccionada = null;
+        EstadoGuardadoNotas = string.Empty;
         Personajes.Clear();
         Relaciones.Clear();
         Cronologias.Clear();
@@ -428,32 +442,97 @@ public class MainViewModel : INotifyPropertyChanged
         CambiosMapa?.Invoke();
     }
 
-    // ---- Notas (pestaña propia, aisladas por proyecto) ----
+    // ---- Notas: editor integrado con autoguardado (sin diálogos) ----
 
-    public void CrearNota(string titulo, string texto)
+    // Crea un borrador visible en la lista pero SIN guardar en BD:
+    // solo se persiste al primer autoguardado con contenido.
+    public void NuevaNotaBorrador()
     {
-        if (ProyectoActual is null || string.IsNullOrWhiteSpace(titulo))
+        if (ProyectoActual is null)
             return;
+        if (NotaSeleccionada != null)
+            GuardarNotaEditada(NotaSeleccionada);
         var n = new Nota
         {
             ProyectoId = ProyectoActual.Id,
-            Titulo = titulo.Trim(),
-            Texto = texto.Trim(),
             FechaCreacion = DateTime.Now
         };
         _db.Notas.Add(n);
-        _db.SaveChanges();
         Notas.Insert(0, n); // las nuevas arriba (lista ordenada por fecha desc.)
         NotaSeleccionada = n;
+        EstadoGuardadoNotas = string.Empty;
     }
 
-    public void ActualizarNota(Nota nota, string titulo, string texto)
+    // Guarda la nota editada en el panel integrado. Es idempotente y segura:
+    // - recorta espacios; un borrador (Id == 0) totalmente vacío se descarta sin dejar rastro;
+    // - una nota existente vaciada del todo se revierte a su último estado guardado;
+    // - sin título pero con texto, el título se deduce de la primera línea.
+    // El contenido puede ser texto plano (notas antiguas) o XAML de FlowDocument
+    // (al aplicar negrita/cursiva); las comprobaciones usan siempre el texto plano.
+    // Devuelve true si revirtió la nota (la vista debe recargar el documento).
+    public bool GuardarNotaEditada(Nota nota)
     {
-        if (string.IsNullOrWhiteSpace(titulo))
-            return;
-        nota.Titulo = titulo.Trim();
-        nota.Texto = texto.Trim();
+        var estado = _db.Entry(nota).State;
+        if (estado == EntityState.Deleted || estado == EntityState.Detached)
+            return false;
+        nota.Titulo = nota.Titulo.Trim();
+        bool esRico = EsDocumentoXaml(nota.Texto);
+        string plano = esRico ? TextoPlano(nota.Texto) : nota.Texto.Trim();
+        if (!esRico)
+            nota.Texto = plano;
+        if (string.IsNullOrWhiteSpace(nota.Titulo) && string.IsNullOrWhiteSpace(plano))
+        {
+            if (nota.Id == 0)
+            {
+                _db.Notas.Remove(nota);
+                Notas.Remove(nota);
+                if (NotaSeleccionada == nota)
+                    NotaSeleccionada = null;
+                EstadoGuardadoNotas = string.Empty;
+                return false;
+            }
+            _db.Entry(nota).Reload();
+            EstadoGuardadoNotas = "Sin cambios";
+            return true;
+        }
+        if (string.IsNullOrWhiteSpace(nota.Titulo))
+            nota.Titulo = PrimeraLinea(plano, 60);
         _db.SaveChanges();
+        EstadoGuardadoNotas = $"Guardado ✓ {DateTime.Now:HH:mm:ss}";
+        return false;
+    }
+
+    // El editor rico guarda XAML de FlowDocument; el texto plano heredado no.
+    public static bool EsDocumentoXaml(string? texto) =>
+        texto != null && texto.TrimStart().StartsWith("<FlowDocument", StringComparison.Ordinal);
+
+    // Extrae el texto visible (sin marcas) para vacíos, títulos y búsquedas.
+    public static string TextoPlano(string texto)
+    {
+        if (!EsDocumentoXaml(texto))
+            return texto;
+        try
+        {
+            if (XamlReader.Parse(texto) is FlowDocument doc)
+                return new TextRange(doc.ContentStart, doc.ContentEnd).Text.Trim();
+        }
+        catch
+        {
+            // XAML dañado: se trata como texto tal cual.
+        }
+        return texto.Trim();
+    }
+
+    public void MarcarNotaEditando()
+    {
+        EstadoGuardadoNotas = "Editando…";
+    }
+
+    private static string PrimeraLinea(string texto, int maximo)
+    {
+        string linea = texto.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+        linea = linea.Trim();
+        return linea.Length <= maximo ? linea : linea[..maximo].TrimEnd() + "…";
     }
 
     public void EliminarNotaSeleccionada()

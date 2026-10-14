@@ -9,9 +9,24 @@
         MinHeight="500" MinWidth="800"
         Background="#F5F3EF"
         PreviewKeyDown="Ventana_Tecla"
-        PreviewMouseLeftButtonDown="Ventana_ClickFueraMapa">
+        PreviewMouseLeftButtonDown="Ventana_ClickFueraMapa"
+        Closing="Ventana_Closing">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <!-- Botones de formato de notas: fondo apagado, resaltado cuando está activo -->
+        <Style x:Key="EstiloBotonFormato" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#45475E"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Width" Value="32"/>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="#5B7C99"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <!-- Estilo coherente de nodo desde el prototipo -->
         <Style x:Key="EstiloNodo" TargetType="Border">
             <Setter Property="Width" Value="124"/>
@@ -30,7 +45,8 @@
     </Window.Resources>
 
     <Grid>
-        <TabControl Margin="8" Background="#F5F3EF" BorderBrush="#D8D2C4">
+        <TabControl x:Name="Pestanas" Margin="8" Background="#F5F3EF" BorderBrush="#D8D2C4"
+                    SelectionChanged="Pestanas_SelectionChanged">
             <TabItem Header="Personajes">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -396,17 +412,14 @@
                         <DockPanel LastChildFill="True">
                             <TextBlock DockPanel.Dock="Top" Text="Notas" Foreground="#F5F3EF"
                                        FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <UniformGrid DockPanel.Dock="Bottom" Columns="3" Margin="0,8,0,0">
-                                <Button Content="Nueva" Click="NuevaNota_Click" Margin="0,0,4,0" Padding="4"
-                                        Background="#5B7C99" Foreground="White"
-                                        BorderThickness="0" Cursor="Hand"/>
-                                <Button Content="Editar" Click="EditarNota_Click" Margin="0,0,4,0" Padding="4"
-                                        Background="#45475E" Foreground="White"
-                                        BorderThickness="0" Cursor="Hand"/>
-                                <Button Content="Borrar" Click="EliminarNota_Click" Padding="4"
-                                        Background="#D64545" Foreground="White"
-                                        BorderThickness="0" Cursor="Hand"/>
-                            </UniformGrid>
+                            <Button DockPanel.Dock="Top" Content="+ Nueva nota" Click="NuevaNota_Click"
+                                    Margin="0,0,0,8" Padding="6"
+                                    Background="#5B7C99" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"/>
+                            <Button DockPanel.Dock="Bottom" Content="Borrar" Click="EliminarNota_Click"
+                                    Margin="0,8,0,0" Padding="4"
+                                    Background="#D64545" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"/>
                             <ListBox ItemsSource="{Binding Notas}"
                                      SelectedItem="{Binding NotaSeleccionada, Mode=TwoWay}"
                                      Background="#343654" Foreground="#F5F3EF"
@@ -424,34 +437,72 @@
                         </DockPanel>
                     </Border>
                     <Border Grid.Column="1" Background="White" CornerRadius="8"
-                            BorderBrush="#D8D2C4" BorderThickness="1" Padding="12">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel DataContext="{Binding NotaSeleccionada}">
-                                <TextBlock Text="Detalle de la nota" FontSize="14" FontWeight="SemiBold"
-                                           Foreground="#2B2D42" Margin="0,0,0,8"/>
-                                <TextBlock Text="Título" Foreground="#8A8578" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding Titulo}" Foreground="#2B2D42" FontWeight="SemiBold"
-                                           TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                <TextBlock Text="Creada" Foreground="#8A8578" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding FechaCreacion, StringFormat=g}" Foreground="#2B2D42" Margin="0,0,0,8"/>
-                                <TextBlock Text="Texto" Foreground="#8A8578" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding Texto}" Foreground="#2B2D42"
-                                           TextWrapping="Wrap"/>
-                                <TextBlock Text="Selecciona una nota de la lista para verla aquí."
-                                           Foreground="#8A8578" FontStyle="Italic" TextWrapping="Wrap" Margin="0,12,0,0">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                            BorderBrush="#D8D2C4" BorderThickness="1" Padding="14">
+                        <Grid DataContext="{Binding NotaSeleccionada}">
+                            <!-- Estado vacío: invita a crear la primera nota -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <TextBlock Text="Ninguna nota seleccionada" FontSize="18" FontWeight="SemiBold"
+                                           Foreground="#2B2D42" TextAlignment="Center" TextWrapping="Wrap"/>
+                                <TextBlock Text="Elige una nota de la lista o crea una nueva para empezar a escribir. Los cambios se guardan solos."
+                                           Foreground="#8A8578" TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,16"/>
+                                <Button Content="+ Crear mi primera nota" Click="NuevaNota_Click" Padding="10,6"
+                                        Background="#5B7C99" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                        HorizontalAlignment="Center"/>
                             </StackPanel>
-                        </ScrollViewer>
+                            <!-- Editor integrado: escribe directo, sin ventanas -->
+                            <DockPanel LastChildFill="True">
+                                <DockPanel.Style>
+                                    <Style TargetType="DockPanel">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DockPanel.Style>
+                                <TextBlock DockPanel.Dock="Top" Text="Título" Foreground="#8A8578" Margin="0,0,0,2"/>
+                                <TextBox DockPanel.Dock="Top" Margin="0,0,0,10" Padding="8,6" MaxLength="150"
+                                         FontSize="18" FontWeight="SemiBold" Foreground="#2B2D42"
+                                         BorderBrush="#D8D2C4"
+                                         Text="{Binding Titulo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                <DockPanel DockPanel.Dock="Bottom" LastChildFill="False" Margin="0,10,0,0">
+                                    <TextBlock DockPanel.Dock="Left"
+                                               Text="{Binding FechaCreacion, StringFormat='Creada el {0:g}'}"
+                                               Foreground="#8A8578" FontSize="11" VerticalAlignment="Center"/>
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="{Binding DataContext.EstadoGuardadoNotas, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                               Foreground="#5B7C99" FontSize="11" FontStyle="Italic" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,2">
+                                    <TextBlock DockPanel.Dock="Left" Text="Contenido" Foreground="#8A8578"
+                                               VerticalAlignment="Center"/>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <ToggleButton x:Name="BtnNegrita" Content="N" FontWeight="Bold"
+                                                      Margin="0,0,4,0" Click="FormatoNegrita_Click"
+                                                      ToolTip="Negrita (Ctrl+B)"
+                                                      Style="{StaticResource EstiloBotonFormato}"/>
+                                        <ToggleButton x:Name="BtnCursiva" Content="K" FontStyle="Italic"
+                                                      Click="FormatoCursiva_Click" ToolTip="Cursiva (Ctrl+I)"
+                                                      Style="{StaticResource EstiloBotonFormato}"/>
+                                    </StackPanel>
+                                </DockPanel>
+                                <RichTextBox x:Name="CajaTexto" Padding="8,6" FontSize="13" Foreground="#2B2D42"
+                                             BorderBrush="#D8D2C4" VerticalScrollBarVisibility="Auto"
+                                             SpellCheck.IsEnabled="True" TextChanged="CajaTexto_TextChanged"
+                                             SelectionChanged="CajaTexto_SelectionChanged"/>
+                            </DockPanel>
+                        </Grid>
                     </Border>
                 </Grid>
             </TabItem>
