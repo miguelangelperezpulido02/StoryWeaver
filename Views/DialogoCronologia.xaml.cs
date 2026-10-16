@@ -41,6 +41,7 @@ public partial class DialogoCronologia : Window
         if (notas != null)
         {
             CboNota.ItemsSource = notas;
+            CboNota.DisplayMemberPath = nameof(Nota.Titulo); // ← muestra el título en lugar del tipo
             // Si hay una nota existente, intentamos seleccionarla.
             if (existente != null && existente.NotaId.HasValue)
                 CboNota.SelectedItem = notas.FirstOrDefault(n => n.Id == existente.NotaId.Value);

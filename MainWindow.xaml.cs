@@ -1037,6 +1037,13 @@ public partial class MainWindow : Window
         tooltip += "\n" + (ev.PersonajeId is null ? "(Sin personaje)" : vm.NombrePersonaje(ev.PersonajeId.Value));
         if (!string.IsNullOrWhiteSpace(ev.Descripcion))
             tooltip += "\n" + ev.Descripcion;
+        // Añade el título de la nota asociada si existe.
+        if (ev.NotaId.HasValue)
+        {
+            var nota = vm.Notas.FirstOrDefault(n => n.Id == ev.NotaId.Value);
+            if (nota != null)
+                tooltip += "\nNota: " + nota.Titulo;
+        }
         tarjeta.ToolTip = tooltip;
 
         tarjeta.PreviewMouseLeftButtonDown += Tarjeta_MouseLeftButtonDown;
