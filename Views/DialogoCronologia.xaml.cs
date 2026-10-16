@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Scriptorum.Modelos;
@@ -6,8 +7,6 @@ namespace Scriptorum.Views;
 
 // Sirve para crear y para editar: si recibe un evento existente,
 // prellena los campos y cambia los textos a modo edición.
-// El ComboBox mezcla la opción "(Sin personaje)" (string) con Personajes:
-// Personaje.ToString() muestra su Nombre.
 public partial class DialogoCronologia : Window
 {
     public string TituloEvento => TxtTitulo.Text.Trim();
@@ -15,7 +14,13 @@ public partial class DialogoCronologia : Window
     public string TipoEvento => (CboTipo.SelectedItem as ComboBoxItem)?.Content as string ?? "BEAT";
     public Personaje? PersonajeSeleccionado => CboPersonaje.SelectedItem as Personaje;
 
-    public DialogoCronologia(IList<Personaje> personajes, Cronologia? existente = null)
+    // Nota asociada a este evento (opcional).
+    public int? NotaId { get; private set; }
+
+    // Nota seleccionada en el combo (para llenar el combo desde el VM).
+    public Nota? NotaSeleccionada { get; set; }
+
+    public DialogoCronologia(IList<Personaje> personajes, IList<Nota>? notas = null, Cronologia? existente = null)
     {
         InitializeComponent();
 
@@ -30,6 +35,15 @@ public partial class DialogoCronologia : Window
                 CboTipo.SelectedItem = item;
                 break;
             }
+        }
+
+        // Cargar notas para el ComboBoxNota (solo si se proporcionaron).
+        if (notas != null)
+        {
+            CboNota.ItemsSource = notas;
+            // Si hay una nota existente, intentamos seleccionarla.
+            if (existente != null && existente.NotaId.HasValue)
+                CboNota.SelectedItem = notas.FirstOrDefault(n => n.Id == existente.NotaId.Value);
         }
 
         if (existente != null)
@@ -53,7 +67,19 @@ public partial class DialogoCronologia : Window
                 if (p != null)
                     CboPersonaje.SelectedItem = p;
             }
+            // Si ya tiene nota, seleccionarla en el combo.
+            if (existente.NotaId.HasValue && CboNota.ItemsSource is IList<Nota> listaNotas)
+                CboNota.SelectedItem = listaNotas.FirstOrDefault(n => n.Id == existente.NotaId.Value);
         }
+    }
+
+    private void CboNota_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Cuando el usuario selecciona una nota, guardamos el Id.
+        if (CboNota.SelectedItem is Nota n)
+            NotaId = n.Id;
+        else
+            NotaId = null;
     }
 
     private void Aceptar_Click(object sender, RoutedEventArgs e)
@@ -64,6 +90,12 @@ public partial class DialogoCronologia : Window
             TxtError.Visibility = Visibility.Visible;
             return;
         }
+
+        // Guardar el NotaId si hay selección.
+        if (CboNota.SelectedItem is Nota n)
+            NotaId = n.Id;
+        else
+            NotaId = null;
 
         DialogResult = true;
     }

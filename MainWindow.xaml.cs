@@ -734,11 +734,17 @@ public partial class MainWindow : Window
         var vm = VM;
         if (vm is null || sender is not Button boton || boton.Tag is not int lineaId)
             return;
-        var dialogo = new DialogoCronologia(vm.Personajes) { Owner = this };
+        var dialogo = new DialogoCronologia(vm.Personajes, vm.Notas) { Owner = this };
         if (dialogo.ShowDialog() != true)
             return;
         vm.CrearEvento(dialogo.TituloEvento, dialogo.DescripcionEvento,
             dialogo.PersonajeSeleccionado?.Id, dialogo.TipoEvento, lineaId);
+        // Asignar la nota asociada después de crear el evento.
+        if (dialogo.NotaId.HasValue)
+        {
+            var nuevoEvt = vm.Cronologias.LastOrDefault();
+            if (nuevoEvt != null) nuevoEvt.NotaId = dialogo.NotaId.Value;
+        }
         RedibujarCronologia();
     }
 
@@ -769,12 +775,19 @@ public partial class MainWindow : Window
 
     private void AbrirEdicionEvento(MainViewModel vm, Cronologia evento)
     {
-        var dialogo = new DialogoCronologia(vm.Personajes, evento) { Owner = this };
+        var dialogo = new DialogoCronologia(vm.Personajes, vm.Notas, evento) { Owner = this };
         if (dialogo.ShowDialog() != true)
             return;
         vm.ActualizarEvento(evento, dialogo.TituloEvento,
             dialogo.DescripcionEvento,
             dialogo.PersonajeSeleccionado?.Id, dialogo.TipoEvento);
+        // Persistir el NotaId si cambió.
+        if (evento.NotaId != dialogo.NotaId)
+        {
+            // Si dialogo.NotaId tiene valor, úsalo; de lo contrario, pon null.
+            int? notaAplicar = dialogo.NotaId;
+            evento.NotaId = notaAplicar;
+        }
         RedibujarCronologia();
     }
 
