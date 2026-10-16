@@ -643,6 +643,60 @@ public class MainViewModel : INotifyPropertyChanged
         CronologiaSeleccionada = null;
     }
 
+    // Borra la línea de tiempo seleccionada (la que tiene el evento activo)
+    // con doble confirmación y desvinculación de notas.
+    public void EliminarLineaTiempo()
+    {
+        var evento = CronologiaSeleccionada;
+        if (evento is null)
+        {
+            MessageBox.Show("Selecciona un evento de la línea de tiempo que quieres borrar.", "Scriptorum",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // LineaId es int (no nullable), usamos su valor directamente.
+        int lineaId = evento.LineaId;
+
+        // Primera confirmación
+        if (MessageBox.Show($"¿Seguro que quieres eliminar la línea de tiempo con los eventos?\n" +
+                            "Esto desvinculará cualquier nota asociada a los eventos de esta línea.",
+                            "Scriptorum", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        // Segunda confirmación
+        if (MessageBox.Show("¿Proceder definitivamente con la eliminación?", "Scriptorum",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        // Desvincular notas de los eventos de esta línea
+        foreach (var crono in Cronologias.Where(c => c.LineaId == lineaId).ToList())
+        {
+            crono.NotaId = null;
+        }
+        _db.SaveChanges();
+
+        // Eliminar todos los eventos de esta línea de la colección y de la BD
+        var eventos = Cronologias.Where(c => c.LineaId == lineaId).ToList();
+        foreach (var ev in eventos)
+        {
+            _db.Cronologias.Remove(ev);
+            Cronologias.Remove(ev);
+        }
+
+        // Eliminar la línea de tiempo de la colección y buscarla en Lineas
+        var lineaAEliminar = Lineas.FirstOrDefault(l => l.Id == lineaId);
+        if (lineaAEliminar != null)
+        {
+            Lineas.Remove(lineaAEliminar);
+        }
+        _db.SaveChanges();
+
+        // Limpiar selección y recargar datos
+        CronologiaSeleccionada = null;
+        CargarDatosProyecto();
+    }
+
     private void OrdenarCronologias()
     {
         var ordenados = Cronologias.OrderBy(x => x.LineaId).ThenBy(x => x.Orden).ThenBy(x => x.Id).ToList();
