@@ -675,6 +675,29 @@ public partial class MainWindow : Window
         VM?.EliminarLineaTiempo();
     }
 
+    private void BtnVerNota_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = VM;
+        if (vm is null || vm.CronologiaSeleccionada is null)
+            return;
+        if (vm.CronologiaSeleccionada.NotaId.HasValue)
+        {
+            var nota = vm.Notas.FirstOrDefault(n => n.Id == vm.CronologiaSeleccionada.NotaId.Value);
+            if (nota != null)
+            {
+                vm.NotaSeleccionada = nota;
+                // Cambiar a la pestaña Notas (índice 2).
+                if (Pestanas.SelectedIndex != 2)
+                    Pestanas.SelectedIndex = 2;
+            }
+        }
+        else
+        {
+            MessageBox.Show("Este evento no tiene nota asociada.", "Scriptorum",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
     // Cambiar de pestaña o cerrar la app vuelca lo escrito para no perderlo.
     // El guard solo reacciona al cambio de pestaña propio: los SelectionChanged
     // de listas internas (p. ej. la de notas) burbujean hasta aquí y deben ignorarse,
