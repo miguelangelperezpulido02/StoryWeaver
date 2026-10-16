@@ -56,6 +56,15 @@ public class Cronologia : INotifyPropertyChanged
         set { _descripcion = value; OnPropertyChanged(); }
     }
 
+    // Referencia opcional a una nota asociada a este evento.
+    private int? _notaId;
+
+    public int? NotaId
+    {
+        get => _notaId;
+        set { _notaId = value; OnPropertyChanged(); }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     protected void OnPropertyChanged([CallerMemberName] string? name = null)

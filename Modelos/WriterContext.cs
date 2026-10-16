@@ -86,6 +86,9 @@ public class WriterContext : DbContext
             e.Property(c => c.Descripcion).HasMaxLength(2000);
             e.Property(c => c.Tipo).IsRequired().HasMaxLength(20);
 
+            // Referencia opcional a una nota asociada a este evento.
+            e.Property(c => c.NotaId).HasColumnName("NotaId");
+
             // Cada evento pertenece a un único proyecto y a una línea de tiempo;
             // el personaje es opcional.
             e.HasOne<Proyecto>()
@@ -177,6 +180,13 @@ public class WriterContext : DbContext
         {
             using var alter = conn.CreateCommand();
             alter.CommandText = "ALTER TABLE Cronologias ADD COLUMN Orden INTEGER NOT NULL DEFAULT 0;";
+            alter.ExecuteNonQuery();
+        }
+
+        if (!ExisteColumna(conn, "Cronologias", "NotaId"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE Cronologias ADD COLUMN NotaId INTEGER NULL;";
             alter.ExecuteNonQuery();
         }
 

@@ -389,6 +389,9 @@
                             <Button Content="Borrar evento" Click="EliminarEvento_Click" Padding="10,4" Margin="6,0,0,0"
                                     Background="#D64545" Foreground="White"
                                     BorderThickness="0" Cursor="Hand"/>
+                            <Button Content="Borrar línea" Click="EliminarLineaTiempo_Click" Padding="10,4" Margin="6,0,0,0"
+                                    Background="#D64545" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"/>
                         </StackPanel>
                     </DockPanel>
                     <Border Grid.Row="1" Background="#F5F3EF" CornerRadius="8"

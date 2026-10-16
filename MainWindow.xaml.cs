@@ -670,6 +670,11 @@ public partial class MainWindow : Window
         VM?.EliminarNotaSeleccionada();
     }
 
+    private void EliminarLineaTiempo_Click(object sender, RoutedEventArgs e)
+    {
+        VM?.EliminarLineaTiempo();
+    }
+
     // Cambiar de pestaña o cerrar la app vuelca lo escrito para no perderlo.
     // El guard solo reacciona al cambio de pestaña propio: los SelectionChanged
     // de listas internas (p. ej. la de notas) burbujean hasta aquí y deben ignorarse,
