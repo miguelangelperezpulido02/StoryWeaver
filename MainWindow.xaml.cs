@@ -788,6 +788,18 @@ public partial class MainWindow : Window
         if (sender is not FrameworkElement elemento || elemento.Tag is not Cronologia evento || vm is null)
             return;
 
+        // Si el evento tiene una nota asociada, seleccionarla y cambiar a la pestaña Notas.
+        if (evento.NotaId.HasValue)
+        {
+            var nota = vm.Notas.FirstOrDefault(n => n.Id == evento.NotaId.Value);
+            if (nota != null)
+            {
+                vm.NotaSeleccionada = nota;
+                if (Pestanas.SelectedIndex != 2)
+                    Pestanas.SelectedIndex = 2;
+            }
+        }
+
         vm.CronologiaSeleccionada = evento;
         // Border no tiene evento de doble clic: se detecta por conteo.
         if (e.ClickCount >= 2)
